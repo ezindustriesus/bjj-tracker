@@ -9,9 +9,7 @@ export default function RivalriesPage() {
   const [selected, setSelected] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/matches')
-      .then(r => r.json())
-      .then(data => { setMatches(data); setLoading(false) })
+    fetch('/api/matches').then(r => r.json()).then(data => { setMatches(data); setLoading(false) })
   }, [])
 
   const rivals = getTopOpponents(matches, 2)
@@ -20,75 +18,77 @@ export default function RivalriesPage() {
     : []
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Rivalries</h1>
-        <p className="text-zinc-500 text-sm mt-1">Head-to-head records vs repeat opponents</p>
+    <div style={{ paddingTop: 8 }}>
+      <div style={{ marginBottom: 24 }}>
+        <p className="label" style={{ marginBottom: 4 }}>Head-to-Head</p>
+        <h1 className="heading-1">Rivalries</h1>
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-zinc-500">Loading...</div>
+        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading...</div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Rivals list */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium mb-3">
-              Opponents faced 2+ times ({rivals.length})
-            </p>
-            <div className="space-y-2">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          {/* List */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)' }}>
+              <p className="heading-2">Repeat Opponents</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>{rivals.length} opponents faced 2+ times</p>
+            </div>
+            <div style={{ overflowY: 'auto', maxHeight: 520 }}>
               {rivals.map(r => (
-                <button
-                  key={r.opponent}
-                  onClick={() => setSelected(selected === r.opponent ? null : r.opponent)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left ${
-                    selected === r.opponent
-                      ? 'bg-yellow-500/10 border border-yellow-500/30'
-                      : 'bg-zinc-800 hover:bg-zinc-700 border border-transparent'
-                  }`}
-                >
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-zinc-200">{r.opponent}</p>
-                    <p className="text-xs text-zinc-500">{r.total} matches</p>
+                <button key={r.opponent} onClick={() => setSelected(selected === r.opponent ? null : r.opponent)} style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '14px 24px',
+                  background: selected === r.opponent ? 'var(--gold-light)' : 'transparent',
+                  border: 'none',
+                  borderBottom: '1px solid var(--border)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.opponent}</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{r.total} matches</p>
                   </div>
-                  <div className="text-right">
-                    <span className="text-sm font-bold text-green-400">{r.wins}</span>
-                    <span className="text-zinc-600 mx-1">-</span>
-                    <span className="text-sm font-bold text-red-400">{r.losses}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--win)' }}>{r.wins}</span>
+                    <span style={{ color: 'var(--border-strong)', fontSize: '0.875rem' }}>–</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--loss)' }}>{r.losses}</span>
                   </div>
-                  <div className={`text-xs px-2 py-1 rounded font-medium ${
-                    r.wins > r.losses ? 'bg-green-500/10 text-green-400' :
-                    r.losses > r.wins ? 'bg-red-500/10 text-red-400' :
-                    'bg-zinc-700 text-zinc-400'
-                  }`}>
+                  <span className={`badge ${r.wins > r.losses ? 'badge-win' : r.losses > r.wins ? 'badge-loss' : ''}`} style={{ background: r.wins === r.losses ? 'var(--surface-2)' : undefined, color: r.wins === r.losses ? 'var(--text-muted)' : undefined, fontSize: '0.6875rem', minWidth: 30, textAlign: 'center' }}>
                     {r.wins > r.losses ? 'W' : r.losses > r.wins ? 'L' : 'T'}
-                  </div>
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Match history for selected rival */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          {/* Detail */}
+          <div className="card">
             {selected ? (
               <>
-                <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium mb-1">
-                  vs {selected}
-                </p>
-                <p className="text-xs text-zinc-600 mb-3">Full match history</p>
-                <div className="space-y-2">
+                <div style={{ marginBottom: 20 }}>
+                  <p className="label" style={{ marginBottom: 2 }}>vs</p>
+                  <p className="heading-2">{selected}</p>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                    {opponentMatches.filter(m => m.result === 'Win').length} wins · {opponentMatches.filter(m => m.result === 'Loss').length} losses
+                  </p>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {opponentMatches.map((m, i) => (
-                    <div key={i} className="flex items-start gap-3 p-2.5 bg-zinc-800 rounded-lg">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${
-                        m.result === 'Win' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-                      }`}>
-                        {m.result === 'Win' ? 'W' : 'L'}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-zinc-300">{m.tournament}</p>
-                        <p className="text-xs text-zinc-500">{m.method} · {m.belt} · {m.gi_nogi}</p>
-                        {m.score && <p className="text-xs text-zinc-600">Score: {m.score}</p>}
+                    <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 14px', background: 'var(--bg)', borderRadius: 10, alignItems: 'flex-start' }}>
+                      <span className={`badge ${m.result === 'Win' ? 'badge-win' : 'badge-loss'}`} style={{ marginTop: 1, flexShrink: 0 }}>{m.result}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.tournament}</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                          {m.method} · {m.belt} · {m.gi_nogi}
+                          {m.score && ` · ${m.score}`}
+                        </p>
                       </div>
-                      <p className="text-xs text-zinc-600 flex-shrink-0">
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
                         {new Date(m.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
                       </p>
                     </div>
@@ -96,8 +96,9 @@ export default function RivalriesPage() {
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-center h-40 text-zinc-600 text-sm">
-                Select an opponent to see match history
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, color: 'var(--text-muted)' }}>
+                <span style={{ fontSize: 40, marginBottom: 12 }}>👥</span>
+                <p style={{ fontSize: '0.9rem' }}>Select an opponent</p>
               </div>
             )}
           </div>

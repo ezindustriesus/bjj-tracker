@@ -1,33 +1,36 @@
 'use client'
 
 interface Props {
-  data: { belt: string; wins: number; losses: number; winRate: number }[]
+  data: { belt: string; wins: number; losses: number; winRate: number; total: number }[]
 }
 
-const beltColors: Record<string, string> = {
-  White: 'bg-zinc-100',
-  Blue: 'bg-blue-500',
-  Purple: 'bg-purple-500',
-  Brown: 'bg-amber-800',
-  Black: 'bg-zinc-900 border border-zinc-600',
+const beltDot: Record<string, string> = {
+  White: '#e0ddd8',
+  Blue: '#3b7dd8',
+  Purple: '#8b5cf6',
+  Brown: '#92400e',
+  Black: '#1a1714',
 }
 
 export default function BeltBreakdown({ data }: Props) {
+  const max = Math.max(...data.map(b => b.total))
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {data.map(b => (
-        <div key={b.belt} className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${beltColors[b.belt] || 'bg-zinc-500'}`} />
-          <div className="flex-1">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-sm text-zinc-300">{b.belt}</span>
-              <span className="text-xs text-zinc-500">{b.wins}-{b.losses} ({b.winRate}%)</span>
+        <div key={b.belt}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: beltDot[b.belt] || '#ccc', border: b.belt === 'White' ? '1.5px solid #ccc5b9' : 'none', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>{b.belt}</span>
             </div>
-            <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-yellow-500 rounded-full"
-                style={{ width: `${b.winRate}%` }}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{b.wins}–{b.losses}</span>
+              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', fontWeight: 600, color: b.winRate >= 70 ? 'var(--win)' : b.winRate >= 50 ? 'var(--gold)' : 'var(--loss)', minWidth: 38, textAlign: 'right' }}>{b.winRate}%</span>
+            </div>
+          </div>
+          <div style={{ height: 6, background: 'var(--surface-2)', borderRadius: 99, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${(b.total / max) * 100}%`, background: 'var(--border-strong)', borderRadius: 99, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${b.winRate}%`, background: beltDot[b.belt] || '#ccc', borderRadius: 99 }} />
             </div>
           </div>
         </div>

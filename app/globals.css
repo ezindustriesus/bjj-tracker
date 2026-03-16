@@ -2,16 +2,99 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --font-sans: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-2: #f0ede8;
+  --border: #e5e0d8;
+  --border-strong: #ccc5b9;
+
+  --text-primary: #1a1714;
+  --text-secondary: #6b6459;
+  --text-muted: #a39b8f;
+
+  --gold: #c8952a;
+  --gold-light: #fdf3e0;
+  --gold-border: #f0d9a0;
+
+  --win: #1a7a4a;
+  --win-bg: #e8f5ee;
+  --loss: #b33a2a;
+  --loss-bg: #faeae8;
+
+  --blue: #1e4f8f;
+  --blue-bg: #e8eef8;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
 body {
-  background: #09090b;
-  color: #fafafa;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
-* {
-  box-sizing: border-box;
+/* Typography scale */
+.display { font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.heading-1 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; }
+.heading-2 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.015em; }
+.label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.mono { font-family: var(--font-mono); }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #18181b; }
-::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #52525b; }
+.card-sm {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+/* Pill badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.badge-win { background: var(--win-bg); color: var(--win); }
+.badge-loss { background: var(--loss-bg); color: var(--loss); }
+.badge-gi { background: var(--blue-bg); color: var(--blue); }
+.badge-nogi { background: #fef3e8; color: #9a5f1a; }
+.badge-suit { background: #f0e8f8; color: #6b3fa0; }
+.badge-gold { background: var(--gold-light); color: var(--gold); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.4s ease forwards; }
+.fade-up-1 { animation: fadeUp 0.4s 0.05s ease both; }
+.fade-up-2 { animation: fadeUp 0.4s 0.1s ease both; }
+.fade-up-3 { animation: fadeUp 0.4s 0.15s ease both; }
+.fade-up-4 { animation: fadeUp 0.4s 0.2s ease both; }

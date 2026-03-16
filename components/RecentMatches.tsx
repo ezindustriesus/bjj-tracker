@@ -1,39 +1,60 @@
 import { Match } from '@/lib/supabase'
-import { format } from 'date-fns'
 
-interface Props {
-  matches: Match[]
+interface Props { matches: Match[] }
+
+function giClass(gi: string) {
+  if (gi === 'Gi') return 'badge badge-gi'
+  if (gi === 'No Gi') return 'badge badge-nogi'
+  return 'badge badge-suit'
+}
+
+function medalEmoji(medal: string | null | undefined) {
+  if (!medal) return null
+  if (medal === 'Gold') return '🥇'
+  if (medal === 'Silver') return '🥈'
+  if (medal === 'Bronze') return '🥉'
+  return null
 }
 
 export default function RecentMatches({ matches }: Props) {
   return (
-    <div className="space-y-1">
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Header row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 120px 90px 70px', gap: 12, padding: '0 0 10px', borderBottom: '1px solid var(--border)' }}>
+        {['Result', 'Opponent / Tournament', 'Method', 'Division', 'Date'].map(h => (
+          <p key={h} className="label" style={{ fontSize: '0.6rem' }}>{h}</p>
+        ))}
+      </div>
       {matches.map((m, i) => (
-        <div key={i} className="flex items-center gap-3 py-2 border-b border-zinc-800 last:border-0">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-            m.result === 'Win'
-              ? 'bg-green-500/10 text-green-400'
-              : 'bg-red-500/10 text-red-400'
-          }`}>
-            {m.result === 'Win' ? 'W' : 'L'}
+        <div key={i} style={{
+          display: 'grid',
+          gridTemplateColumns: '60px 1fr 120px 90px 70px',
+          gap: 12,
+          padding: '12px 0',
+          borderBottom: '1px solid var(--border)',
+          alignItems: 'center',
+          animation: `fadeUp 0.3s ${i * 0.04}s ease both`,
+        }}>
+          {/* Result */}
+          <span className={`badge ${m.result === 'Win' ? 'badge-win' : 'badge-loss'}`} style={{ width: 'fit-content' }}>
+            {m.result}
           </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-zinc-200 truncate">
-              {m.opponent === 'Unknown' ? 'Unknown Opponent' : m.opponent}
+          {/* Opponent */}
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {m.opponent === 'Unknown' ? '—' : m.opponent}
+              {medalEmoji(m.medal) && <span style={{ marginLeft: 6 }}>{medalEmoji(m.medal)}</span>}
             </p>
-            <p className="text-xs text-zinc-500 truncate">{m.tournament}</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{m.tournament}</p>
           </div>
-          <div className="text-right flex-shrink-0">
-            <p className="text-xs text-zinc-400">{m.method}</p>
-            <p className="text-xs text-zinc-600">{format(new Date(m.date), 'MMM d, yy')}</p>
-          </div>
-          <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
-            m.gi_nogi === 'Gi' ? 'text-blue-400 bg-blue-500/10' :
-            m.gi_nogi === 'No Gi' ? 'text-orange-400 bg-orange-500/10' :
-            'text-purple-400 bg-purple-500/10'
-          }`}>
-            {m.gi_nogi}
-          </span>
+          {/* Method */}
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.method || '—'}</p>
+          {/* Division */}
+          <span className={giClass(m.gi_nogi || '')} style={{ width: 'fit-content', fontSize: '0.6875rem' }}>{m.gi_nogi}</span>
+          {/* Date */}
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+            {new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+          </p>
         </div>
       ))}
     </div>
