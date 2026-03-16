@@ -1,25 +1,361 @@
 'use client'
-import { useState } from 'react'
-import { CheckCircle } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Upload, Sparkles, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react'
+import { Match } from '@/lib/supabase'
 
 const defaultForm = {
   date: new Date().toISOString().slice(0, 10),
   tournament: '', organization: 'AGF', belt: 'Purple',
   age_division: 'Master 1 (30+)', weight_class: 'Light (175)',
   gi_nogi: 'Gi', division_type: 'Regular',
-  opponent: '', result: 'Win', method: 'Submission',
+  opponent: '', result: 'Win' as 'Win' | 'Loss', method: 'Submission',
   score: '', medal: '',
 }
 
+type FormData = typeof defaultForm
+
+// ── Reusable form fields ──────────────────────────────────────
+function MatchForm({ form, setForm, onSave, saving, saved }: {
+  form: FormData
+  setForm: (f: FormData) => void
+  onSave: () => void
+  saving: boolean
+  saved: boolean
+}) {
+  const set = (field: string, value: string) => setForm({ ...form, [field]: value } as FormData)
+  const inp: React.CSSProperties = { width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: '0.875rem', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-sans)' }
+  const sel: React.CSSProperties = { ...inp, cursor: 'pointer' }
+  const lbl: React.CSSProperties = { fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div><label style={lbl}>Date</label><input type="date" style={inp} value={form.date} onChange={e => set('date', e.target.value)} /></div>
+        <div><label style={lbl}>Organization</label>
+          <select style={sel} value={form.organization} onChange={e => set('organization', e.target.value)}>
+            {['AGF','IBJJF','Springfield BJJ','Newbreed','Chewjitsu','Grappling Industries','Fuji BJJ','JJ Outlet','Other'].map(o => <option key={o}>{o}</option>)}
+          </select>
+        </div>
+      </div>
+      <div><label style={lbl}>Tournament Name</label><input style={inp} placeholder="e.g. 2026 AGF Missouri State Championships" value={form.tournament} onChange={e => set('tournament', e.target.value)} /></div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div><label style={lbl}>Belt</label>
+          <select style={sel} value={form.belt} onChange={e => set('belt', e.target.value)}>
+            {['White','Blue','Purple','Brown','Black'].map(b => <option key={b}>{b}</option>)}
+          </select>
+        </div>
+        <div><label style={lbl}>Gi / No Gi</label>
+          <select style={sel} value={form.gi_nogi} onChange={e => set('gi_nogi', e.target.value)}>
+            <option>Gi</option><option>No Gi</option><option>Suit</option>
+          </select>
+        </div>
+        <div><label style={lbl}>Age Division</label>
+          <select style={sel} value={form.age_division} onChange={e => set('age_division', e.target.value)}>
+            {['Adult (18+)','Master 1 (30+)','Master 2 (35+)','Senior 1 (40+)','Masters'].map(d => <option key={d}>{d}</option>)}
+          </select>
+        </div>
+        <div><label style={lbl}>Weight Class</label>
+          <select style={sel} value={form.weight_class} onChange={e => set('weight_class', e.target.value)}>
+            {['Light (175)','Challenger I (175)','Middleweight (175-200)','Middle (190)','Heavy (220)','Medium Heavy (205)'].map(w => <option key={w}>{w}</option>)}
+          </select>
+        </div>
+      </div>
+      <div><label style={lbl}>Division Type</label>
+        <select style={sel} value={form.division_type} onChange={e => set('division_type', e.target.value)}>
+          {['Regular','Challenger','Challenger I','Round Robin','Intermediate'].map(d => <option key={d}>{d}</option>)}
+        </select>
+      </div>
+      <div><label style={lbl}>Opponent</label><input style={inp} placeholder="Full name" value={form.opponent} onChange={e => set('opponent', e.target.value)} /></div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div><label style={lbl}>Result</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {(['Win','Loss'] as const).map(r => (
+              <button key={r} onClick={() => set('result', r)} style={{ flex: 1, padding: '10px', borderRadius: 8, fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.15s', background: form.result === r ? (r === 'Win' ? 'var(--win-bg)' : 'var(--loss-bg)') : 'var(--bg)', color: form.result === r ? (r === 'Win' ? 'var(--win)' : 'var(--loss)') : 'var(--text-muted)', border: form.result === r ? `1.5px solid var(--${r === 'Win' ? 'win' : 'loss'})` : '1px solid var(--border)' }}>{r}</button>
+            ))}
+          </div>
+        </div>
+        <div><label style={lbl}>Method</label>
+          <select style={sel} value={form.method} onChange={e => set('method', e.target.value)}>
+            {['Submission','Points','Heel Hook','Armbar','Triangle','Kimura','Guillotine','Rear Naked Choke','Overtime','Ref Decision','Tie Breaker','Disqualification','Walkover','Other'].map(m => <option key={m}>{m}</option>)}
+          </select>
+        </div>
+        <div><label style={lbl}>Score (optional)</label><input style={inp} placeholder="e.g. 5–2" value={form.score} onChange={e => set('score', e.target.value)} /></div>
+        <div><label style={lbl}>Medal</label>
+          <select style={sel} value={form.medal} onChange={e => set('medal', e.target.value)}>
+            <option value="">None</option>
+            {['Gold','Silver','Bronze','5th','7th'].map(m => <option key={m}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <button onClick={onSave} disabled={saving || saved} style={{ width: '100%', padding: '14px', borderRadius: 10, fontWeight: 700, fontSize: '0.9375rem', cursor: saving || saved ? 'default' : 'pointer', border: 'none', fontFamily: 'var(--font-sans)', transition: 'all 0.15s', background: saved ? 'var(--win-bg)' : 'var(--gold)', color: saved ? 'var(--win)' : '#fff', opacity: saving ? 0.7 : 1 }}>
+        {saved ? '✓ Match Saved!' : saving ? 'Saving...' : 'Save Match'}
+      </button>
+    </div>
+  )
+}
+
+// ── AI Entry ──────────────────────────────────────────────────
+function AIEntry({ onParsed }: { onParsed: (matches: FormData[]) => void }) {
+  const [text, setText] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [error, setError] = useState('')
+  const [fileName, setFileName] = useState('')
+  const [imageData, setImageData] = useState<{ base64: string; type: string } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = (file: File) => {
+    setFileName(file.name)
+    setError('')
+
+    // Images — send as base64
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = e => {
+        const base64 = (e.target?.result as string).split(',')[1]
+        setImageData({ base64, type: file.type })
+        setText('')
+      }
+      reader.readAsDataURL(file)
+      return
+    }
+
+    // CSV / text / spreadsheet — read as text
+    if (file.type.includes('csv') || file.type.includes('text') || file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
+      const reader = new FileReader()
+      reader.onload = e => {
+        setText(e.target?.result as string || '')
+        setImageData(null)
+      }
+      reader.readAsText(file)
+      return
+    }
+
+    // XLS/XLSX — prompt user to export as CSV
+    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      setError('For Excel files, please export as CSV first (File → Save As → CSV), then upload the .csv file.')
+      return
+    }
+
+    // PDF or other — read as base64
+    const reader = new FileReader()
+    reader.onload = e => {
+      const base64 = (e.target?.result as string).split(',')[1]
+      setImageData({ base64: base64, type: file.type || 'application/pdf' })
+      setText('')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
+  const handleParse = async () => {
+    if (!text.trim() && !imageData) { setError('Add some text or upload a file first.'); return }
+    setParsing(true)
+    setError('')
+    try {
+      const res = await fetch('/api/ai-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text || undefined, imageBase64: imageData?.base64, imageType: imageData?.type }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Parse failed')
+      if (!data.matches?.length) throw new Error('No matches found. Try adding more detail.')
+
+      // Convert to form data shape
+      const forms: FormData[] = data.matches.map((m: any) => ({
+        date: m.date || new Date().toISOString().slice(0, 10),
+        tournament: m.tournament || '',
+        organization: m.organization || 'AGF',
+        belt: m.belt || 'Purple',
+        age_division: m.age_division || 'Master 1 (30+)',
+        weight_class: m.weight_class || 'Light (175)',
+        gi_nogi: m.gi_nogi || 'Gi',
+        division_type: m.division_type || 'Regular',
+        opponent: m.opponent || '',
+        result: m.result === 'Loss' ? 'Loss' : 'Win',
+        method: m.method || 'Submission',
+        score: m.score || '',
+        medal: m.medal || '',
+      }))
+
+      onParsed(forms)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  const clearFile = () => { setFileName(''); setImageData(null); setText(''); setError('') }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Explainer */}
+      <div style={{ background: 'var(--gold-light)', border: '1px solid var(--gold-border)', borderRadius: 10, padding: '14px 16px' }}>
+        <p style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--gold)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Sparkles size={15} /> AI Match Entry
+        </p>
+        <p style={{ fontSize: '0.8125rem', color: '#7a5c20', lineHeight: 1.5 }}>
+          Paste text, upload a screenshot, photo, CSV, or bracket image. Claude will parse the match details and pre-fill the form for you to review before saving.
+        </p>
+      </div>
+
+      {/* Drop zone */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => fileRef.current?.click()}
+        style={{
+          border: `2px dashed ${dragOver ? 'var(--gold)' : 'var(--border)'}`,
+          borderRadius: 10, padding: '28px 20px', textAlign: 'center', cursor: 'pointer',
+          background: dragOver ? 'var(--gold-light)' : 'var(--bg)',
+          transition: 'all 0.15s',
+        }}
+      >
+        <input ref={fileRef} type="file" style={{ display: 'none' }} accept="image/*,.csv,.txt,.pdf,.xlsx,.xls" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+        {fileName ? (
+          <div>
+            <p style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)', marginBottom: 4 }}>📎 {fileName}</p>
+            {imageData && <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Image ready to parse</p>}
+            {text && <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{text.split('\n').length} lines of text loaded</p>}
+            <button onClick={e => { e.stopPropagation(); clearFile() }} style={{ marginTop: 8, background: 'none', border: 'none', color: 'var(--gold)', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: 600 }}>Remove</button>
+          </div>
+        ) : (
+          <div>
+            <Upload size={24} style={{ color: 'var(--text-muted)', marginBottom: 8 }} />
+            <p style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 2 }}>Drop a file or click to upload</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Photo · Screenshot · CSV · PDF</p>
+          </div>
+        )}
+      </div>
+
+      {/* Text input */}
+      <div>
+        <p style={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', marginBottom: 6 }}>Or paste text</p>
+        <textarea
+          value={text}
+          onChange={e => { setText(e.target.value); setFileName(''); setImageData(null) }}
+          placeholder={`Paste anything — tournament results, bracket info, notes...\n\nExamples:\n"Won by submission over John Smith at AGF Arkansas Open, Masters Gi, April 2025"\n"Lost to Mike Jones on points 3-7, No Gi, Blue belt"\n\nOr paste CSV rows directly from a spreadsheet`}
+          style={{ width: '100%', minHeight: 140, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px', fontSize: '0.875rem', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-sans)', resize: 'vertical', lineHeight: 1.5 }}
+        />
+      </div>
+
+      {error && <p style={{ color: 'var(--loss)', fontSize: '0.875rem', background: 'var(--loss-bg)', padding: '10px 12px', borderRadius: 8 }}>{error}</p>}
+
+      <button onClick={handleParse} disabled={parsing || (!text.trim() && !imageData)} style={{ width: '100%', padding: '13px', borderRadius: 10, fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-sans)', background: 'var(--text-primary)', color: '#fff', opacity: parsing || (!text.trim() && !imageData) ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'opacity 0.15s' }}>
+        <Sparkles size={16} />
+        {parsing ? 'Parsing with AI...' : 'Parse with AI'}
+      </button>
+    </div>
+  )
+}
+
+// ── Review parsed matches ─────────────────────────────────────
+function ParsedReview({ matches, onBack, onSaved }: { matches: FormData[], onBack: () => void, onSaved: () => void }) {
+  const [forms, setForms] = useState(matches)
+  const [expanded, setExpanded] = useState<number>(0)
+  const [saving, setSaving] = useState(false)
+  const [savedIds, setSavedIds] = useState<number[]>([])
+  const [error, setError] = useState('')
+
+  const saveOne = async (i: number) => {
+    setSaving(true); setError('')
+    try {
+      const form = forms[i]
+      if (!form.tournament || !form.opponent) { setError('Tournament and opponent are required'); setSaving(false); return }
+      const res = await fetch('/api/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, score: form.score || null, medal: form.medal || null }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      setSavedIds(s => [...s, i])
+    } catch { setError('Failed to save.') }
+    finally { setSaving(false) }
+  }
+
+  const saveAll = async () => {
+    for (let i = 0; i < forms.length; i++) {
+      if (!savedIds.includes(i)) await saveOne(i)
+    }
+  }
+
+  const allSaved = savedIds.length === forms.length
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <p style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>Review {forms.length} parsed match{forms.length !== 1 ? 'es' : ''}</p>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: 2 }}>Edit any field before saving</p>
+        </div>
+        <button onClick={onBack} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 7, padding: '6px 12px', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>← Back</button>
+      </div>
+
+      {forms.map((form, i) => (
+        <div key={i} className="card-sm" style={{ border: `1px solid ${savedIds.includes(i) ? 'var(--win)' : 'var(--border)'}`, background: savedIds.includes(i) ? 'var(--win-bg)' : '#fff', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: savedIds.includes(i) ? 0 : undefined }} onClick={() => setExpanded(expanded === i ? -1 : i)}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className={`badge ${form.result === 'Win' ? 'badge-win' : 'badge-loss'}`}>{form.result}</span>
+                <span style={{ fontWeight: 600, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.opponent || 'Unknown Opponent'}</span>
+                {savedIds.includes(i) && <span style={{ color: 'var(--win)', fontSize: '0.8rem' }}>✓ Saved</span>}
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.tournament || 'No tournament'} · {form.method}</p>
+            </div>
+            {!savedIds.includes(i) && (expanded === i ? <ChevronUp size={16} color="var(--text-muted)" /> : <ChevronDown size={16} color="var(--text-muted)" />)}
+          </div>
+
+          {expanded === i && !savedIds.includes(i) && (
+            <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+              <MatchForm
+                form={form}
+                setForm={f => setForms(fs => fs.map((x, j) => j === i ? f : x))}
+                onSave={() => saveOne(i)}
+                saving={saving}
+                saved={savedIds.includes(i)}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+
+      {error && <p style={{ color: 'var(--loss)', fontSize: '0.875rem' }}>{error}</p>}
+
+      {!allSaved && forms.length > 1 && (
+        <button onClick={saveAll} disabled={saving} style={{ width: '100%', padding: '13px', borderRadius: 10, fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-sans)', background: 'var(--gold)', color: '#fff', opacity: saving ? 0.7 : 1 }}>
+          Save All {forms.length - savedIds.length} Remaining
+        </button>
+      )}
+
+      {allSaved && (
+        <button onClick={onSaved} style={{ width: '100%', padding: '13px', borderRadius: 10, fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-sans)', background: 'var(--win-bg)', color: 'var(--win)' }}>
+          ✓ All saved — Add more
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────
 export default function AddMatchPage() {
-  const [form, setForm] = useState(defaultForm)
+  const [tab, setTab] = useState<'manual' | 'ai'>('manual')
+  const [form, setForm] = useState<FormData>(defaultForm)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [parsedMatches, setParsedMatches] = useState<FormData[] | null>(null)
 
-  const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }))
-
-  const handleSubmit = async () => {
+  const handleManualSave = async () => {
     if (!form.tournament || !form.opponent) { setError('Tournament and opponent are required'); return }
     setSaving(true); setError('')
     try {
@@ -35,128 +371,45 @@ export default function AddMatchPage() {
     finally { setSaving(false) }
   }
 
-  const inp: React.CSSProperties = { width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: '0.875rem', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-sans)' }
-  const sel: React.CSSProperties = { ...inp, cursor: 'pointer' }
+  const tabBtn = (t: 'manual' | 'ai') => ({
+    padding: '8px 18px', borderRadius: 7, fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', border: 'none',
+    background: tab === t ? (t === 'ai' ? 'var(--text-primary)' : 'var(--gold)') : 'transparent',
+    color: tab === t ? '#fff' : 'var(--text-muted)',
+    fontFamily: 'var(--font-sans)', transition: 'all 0.15s',
+  })
 
   return (
-    <div style={{ paddingTop: 8, maxWidth: 640, margin: '0 auto' }}>
-      <div style={{ marginBottom: 28 }}>
+    <div style={{ paddingTop: 8, maxWidth: 620, margin: '0 auto' }}>
+      <div style={{ marginBottom: 24 }}>
         <p className="label" style={{ marginBottom: 4 }}>Log Result</p>
         <h1 className="heading-1">Add Match</h1>
       </div>
 
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {/* Tournament */}
-        <div>
-          <p className="label" style={{ marginBottom: 12, color: 'var(--gold)', borderBottom: '1px solid var(--gold-border)', paddingBottom: 6 }}>Tournament</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <p className="label" style={{ marginBottom: 6 }}>Date</p>
-              <input type="date" style={inp} value={form.date} onChange={e => set('date', e.target.value)} />
-            </div>
-            <div>
-              <p className="label" style={{ marginBottom: 6 }}>Organization</p>
-              <select style={sel} value={form.organization} onChange={e => set('organization', e.target.value)}>
-                {['AGF','IBJJF','Springfield BJJ','Newbreed','Chewjitsu','Grappling Industries','Fuji BJJ','JJ Outlet','Other'].map(o => <option key={o}>{o}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <p className="label" style={{ marginBottom: 6 }}>Tournament Name</p>
-            <input style={inp} placeholder="e.g. 2026 AGF Missouri State Championships" value={form.tournament} onChange={e => set('tournament', e.target.value)} />
-          </div>
+      {/* Tab switcher */}
+      {!parsedMatches && (
+        <div style={{ display: 'inline-flex', background: 'var(--surface-2)', borderRadius: 9, padding: 3, gap: 2, marginBottom: 20 }}>
+          <button style={tabBtn('manual')} onClick={() => setTab('manual')}>Manual Entry</button>
+          <button style={tabBtn('ai')} onClick={() => setTab('ai')}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={14} /> AI Entry</span>
+          </button>
         </div>
+      )}
 
-        {/* Division */}
-        <div>
-          <p className="label" style={{ marginBottom: 12, color: 'var(--blue)', borderBottom: '1px solid var(--blue-bg)', paddingBottom: 6 }}>Division</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <p className="label" style={{ marginBottom: 6 }}>Belt</p>
-              <select style={sel} value={form.belt} onChange={e => set('belt', e.target.value)}>
-                {['White','Blue','Purple','Brown','Black'].map(b => <option key={b}>{b}</option>)}
-              </select>
-            </div>
-            <div>
-              <p className="label" style={{ marginBottom: 6 }}>Gi / No Gi</p>
-              <select style={sel} value={form.gi_nogi} onChange={e => set('gi_nogi', e.target.value)}>
-                <option>Gi</option><option>No Gi</option><option>Suit</option>
-              </select>
-            </div>
-            <div>
-              <p className="label" style={{ marginBottom: 6 }}>Age Division</p>
-              <select style={sel} value={form.age_division} onChange={e => set('age_division', e.target.value)}>
-                {['Adult (18+)','Master 1 (30+)','Master 2 (35+)','Senior 1 (40+)','Masters'].map(d => <option key={d}>{d}</option>)}
-              </select>
-            </div>
-            <div>
-              <p className="label" style={{ marginBottom: 6 }}>Weight Class</p>
-              <select style={sel} value={form.weight_class} onChange={e => set('weight_class', e.target.value)}>
-                {['Light (175)','Challenger I (175)','Middleweight (175-200)','Middle (190)','Heavy (220)','Medium Heavy (205)'].map(w => <option key={w}>{w}</option>)}
-              </select>
-            </div>
-            <div style={{ gridColumn: 'span 2' }}>
-              <p className="label" style={{ marginBottom: 6 }}>Division Type</p>
-              <select style={sel} value={form.division_type} onChange={e => set('division_type', e.target.value)}>
-                {['Regular','Challenger','Challenger I','Round Robin','Intermediate'].map(d => <option key={d}>{d}</option>)}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Result */}
-        <div>
-          <p className="label" style={{ marginBottom: 12, color: 'var(--win)', borderBottom: '1px solid var(--win-bg)', paddingBottom: 6 }}>Result</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <p className="label" style={{ marginBottom: 6 }}>Opponent</p>
-              <input style={inp} placeholder="Opponent full name" value={form.opponent} onChange={e => set('opponent', e.target.value)} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <p className="label" style={{ marginBottom: 6 }}>Result</p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {['Win','Loss'].map(r => (
-                    <button key={r} onClick={() => set('result', r)} style={{
-                      flex: 1, padding: '10px', borderRadius: 8, fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'var(--font-sans)',
-                      background: form.result === r ? (r === 'Win' ? 'var(--win-bg)' : 'var(--loss-bg)') : 'var(--bg)',
-                      color: form.result === r ? (r === 'Win' ? 'var(--win)' : 'var(--loss)') : 'var(--text-muted)',
-                      border: form.result === r ? (r === 'Win' ? '1.5px solid var(--win)' : '1.5px solid var(--loss)') : '1px solid var(--border)',
-                    }}>{r}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="label" style={{ marginBottom: 6 }}>Method</p>
-                <select style={sel} value={form.method} onChange={e => set('method', e.target.value)}>
-                  {['Submission','Points','Heel Hook','Armbar','Triangle','Kimura','Guillotine','Rear Naked Choke','Overtime','Ref Decision','Tie Breaker','Disqualification','Walkover','Other'].map(m => <option key={m}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <p className="label" style={{ marginBottom: 6 }}>Score (optional)</p>
-                <input style={inp} placeholder="e.g. 5–2" value={form.score} onChange={e => set('score', e.target.value)} />
-              </div>
-              <div>
-                <p className="label" style={{ marginBottom: 6 }}>Medal</p>
-                <select style={sel} value={form.medal} onChange={e => set('medal', e.target.value)}>
-                  <option value="">None</option>
-                  <option>Gold</option><option>Silver</option><option>Bronze</option><option>5th</option><option>7th</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {error && <p style={{ color: 'var(--loss)', fontSize: '0.875rem' }}>{error}</p>}
-
-        <button onClick={handleSubmit} disabled={saving || saved} style={{
-          width: '100%', padding: '14px', borderRadius: 10, fontWeight: 700, fontSize: '0.9375rem', cursor: saving || saved ? 'default' : 'pointer', border: 'none', transition: 'all 0.15s', fontFamily: 'var(--font-sans)',
-          background: saved ? 'var(--win-bg)' : 'var(--gold)',
-          color: saved ? 'var(--win)' : '#fff',
-          opacity: saving ? 0.7 : 1,
-        }}>
-          {saved ? '✓ Match Saved!' : saving ? 'Saving...' : 'Save Match'}
-        </button>
+      <div className="card">
+        {parsedMatches ? (
+          <ParsedReview
+            matches={parsedMatches}
+            onBack={() => setParsedMatches(null)}
+            onSaved={() => setParsedMatches(null)}
+          />
+        ) : tab === 'manual' ? (
+          <>
+            <MatchForm form={form} setForm={setForm} onSave={handleManualSave} saving={saving} saved={saved} />
+            {error && <p style={{ color: 'var(--loss)', fontSize: '0.875rem', marginTop: 8 }}>{error}</p>}
+          </>
+        ) : (
+          <AIEntry onParsed={matches => setParsedMatches(matches)} />
+        )}
       </div>
     </div>
   )
