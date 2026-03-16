@@ -5,7 +5,6 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Server-side client with service role (for API routes)
 export function createServiceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,5 +27,21 @@ export type Match = {
   method: string
   score?: string
   medal?: string
+  created_at?: string
+}
+
+export type Profile = {
+  id: string
+  email: string
+  role: 'admin' | 'viewer'
+  display_name?: string
+  created_at?: string
+}
+
+export type UserRole = {
+  id: string
+  email: string
+  role: 'admin' | 'viewer'
+  name?: string
   created_at?: string
 }
