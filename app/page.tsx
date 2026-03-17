@@ -25,65 +25,59 @@ export default async function Dashboard() {
   const byGiNogi = groupByGiNogi(matches)
   const recent = matches.slice(0, 15)
   const tournaments = new Set(matches.map(m => m.tournament)).size
-  const firstYear = matches.length ? new Date(matches[matches.length - 1].date).getFullYear() : 2019
 
   return (
     <div style={{ paddingTop: 8 }}>
-      {/* Hero header */}
-      <div className="fade-up" style={{ marginBottom: 32 }}>
-        <p className="label" style={{ marginBottom: 6 }}>Zack Kram · Purple Belt</p>
-        <h1 className="heading-1" style={{ marginBottom: 4 }}>Competition Record</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          {record.total} matches across {tournaments} tournaments · {firstYear}–present
+      <div className="fade-up" style={{ marginBottom: 24 }}>
+        <p className="label" style={{ marginBottom: 4 }}>Zack Kram · Purple Belt</p>
+        <h1 className="heading-1">Competition Record</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>
+          {record.total} matches · {tournaments} tournaments · 2019–present
         </p>
       </div>
 
-      {/* Top stat cards */}
-      <div className="fade-up-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
+      {/* Stats - 2 col on mobile, 4 on desktop */}
+      <div className="fade-up-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 12 }}>
         <StatCard label="Overall Record" value={`${record.wins}–${record.losses}`} sub={`${record.winRate}% win rate`} accent icon="🏆" />
-        <StatCard label="Submission Rate" value={`${subRate}%`} sub="of wins by submission" icon="🔒" />
-        <StatCard label="Current Streak" value={`${streak.count} ${streak.type}${streak.count !== 1 ? 's' : ''}`} sub={streak.type === 'Win' ? 'keep it rolling' : 'time to bounce back'} icon={streak.type === 'Win' ? '🔥' : '💪'} />
-        <StatCard label="Medals" value={medals.total} sub={`${medals.gold} gold · ${medals.silver} silver · ${medals.bronze} bronze`} icon="🥇" />
+        <StatCard label="Sub Rate" value={`${subRate}%`} sub="of wins" icon="🔒" />
+        <StatCard label="Streak" value={`${streak.count} ${streak.type}${streak.count !== 1 ? 's' : ''}`} sub={streak.type === 'Win' ? 'keep rolling' : 'bounce back'} icon={streak.type === 'Win' ? '🔥' : '💪'} />
+        <StatCard label="Medals" value={medals.total} sub={`${medals.gold}🥇 ${medals.silver}🥈 ${medals.bronze}🥉`} icon="🎖️" />
       </div>
 
-      {/* Gi / No Gi / Suit */}
-      <div className="fade-up-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+      {/* Gi split - 3 col */}
+      <div className="fade-up-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
         {byGiNogi.map(g => (
           <div key={g.type} className="card-sm" style={{ textAlign: 'center' }}>
-            <p className="label" style={{ marginBottom: 8 }}>{g.type}</p>
-            <p style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', lineHeight: 1 }}>{g.wins}–{g.losses}</p>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{g.winRate}%</p>
+            <p className="label" style={{ marginBottom: 6, fontSize: '0.55rem' }}>{g.type}</p>
+            <p style={{ fontSize: '1.1rem', fontWeight: 700, letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', lineHeight: 1 }}>{g.wins}–{g.losses}</p>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 3 }}>{g.winRate}%</p>
           </div>
         ))}
       </div>
 
-      {/* Charts */}
-      <div className="fade-up-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+      {/* Charts - stacked on mobile */}
+      <div className="fade-up-3" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
         <div className="card">
           <p className="heading-2" style={{ marginBottom: 4 }}>Wins by Year</p>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 20 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 12 }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#1a7a4a' }} /> Wins
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#e5ddd4' }} /> Losses
-            </span>
-          </p>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: 'var(--text-muted)' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#1a7a4a' }} /> Wins</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: 'var(--text-muted)' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#e5ddd4' }} /> Losses</span>
+          </div>
           <WinRateChart data={byYear} />
         </div>
         <div className="card">
-          <p className="heading-2" style={{ marginBottom: 20 }}>Record by Belt</p>
+          <p className="heading-2" style={{ marginBottom: 16 }}>Record by Belt</p>
           <BeltBreakdown data={byBelt} />
         </div>
       </div>
 
-      {/* Recent matches */}
+      {/* Recent matches - scrollable */}
       <div className="fade-up-4 card" style={{ overflowX: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <p className="heading-2">Recent Matches</p>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Last {recent.length}</span>
         </div>
-        <div style={{ minWidth: 520 }}>
+        <div style={{ minWidth: 480 }}>
           <RecentMatches matches={recent} />
         </div>
       </div>
