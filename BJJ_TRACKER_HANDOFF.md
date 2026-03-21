@@ -1,65 +1,72 @@
-# BJJ Competition Tracker — Mat Metrix Integration Handoff
+# BJJ Competition Tracker — MatMetrix Integration Handoff
 
 ## Context
 
-This document is for a Claude instance working inside the **Mat Metrix** project. It describes a fully-built standalone BJJ competition tracking app that needs to be rebuilt natively inside Mat Metrix as a first-class feature — not linked, not embedded, but fully integrated using Mat Metrix's existing stack, design system, auth, and database.
+This document instructs you to integrate a fully-built BJJ competition tracking feature into MatMetrix as a native feature. It has already been running as a standalone app. Everything here needs to be rebuilt inside MatMetrix's existing codebase — same stack, same design system, same auth — not linked or iframed.
 
-The standalone app is live at: https://bjj-tracker-ochre.vercel.app  
-GitHub reference: https://github.com/ezindustriesus/bjj-tracker  
-Historical data file: `bjj_competition_results.csv` (166 matches)
+All 6 context questions have been answered. Do not ask them again. Start building.
 
 ---
 
-## Stack Mapping — BJJ Tracker → Mat Metrix
+## Stack Mapping
 
-| Layer | BJJ Tracker (standalone) | Mat Metrix (target) |
-|-------|--------------------------|----------------------|
-| Framework | Next.js 15 | React 18 + Vite |
-| Backend | Next.js API routes | Express.js (`server/routes.ts`) |
-| Database | Supabase (PostgreSQL) | Neon PostgreSQL |
-| ORM | Supabase client | Drizzle ORM (`shared/schema.ts`) |
-| Auth | Supabase Auth | Passport.js (email/password + Google OAuth) |
-| User ID | `auth.uid()` | `req.user.claims.sub` |
-| Role check | `profiles` table RLS | `user.role === 'admin'` on existing `users` table |
-| Styling | Custom CSS tokens | Tailwind CSS + shadcn/ui |
-| Icons | lucide-react | lucide-react (already installed) |
-| Charts | Recharts | **Add Recharts** (`npm install recharts`) |
-| AI | Anthropic API | Anthropic API (same — keep `ANTHROPIC_API_KEY`) |
-| PDF/PNG export | html2canvas | html2canvas (add if not present) |
+| BJJ Tracker (standalone) | MatMetrix (target) |
+|---|---|
+| Next.js 15 | React 18 + Vite |
+| Supabase client | Neon PostgreSQL + Drizzle ORM |
+| Next.js API routes | Express.js routes in `server/routes.ts` |
+| Supabase RLS policies | `isAuthenticated` middleware + role checks |
+| Supabase Auth | Passport.js (existing) |
+| Custom CSS tokens | Tailwind + shadcn/ui (existing theme) |
+| `@supabase/supabase-js` | Drizzle ORM queries |
 
-**Key differences to keep in mind:**
-- No Supabase client anywhere — all DB access goes through Drizzle
-- No Next.js server components or API routes — Express routes only
-- No RLS policies needed — access control via `isAuthenticated` middleware + role checks
-- No `/api/auth/invite` route — Mat Metrix has its own user management, skip it
-- No separate `profiles` table — use existing `users` table, `user.role` field
+**New dependencies needed:** `recharts` (already in BJJ Tracker, not yet in MatMetrix)
+
+---
+
+## Routes
+
+All competition routes live under `/competition`:
+
+| Path | Page |
+|------|------|
+| `/competition` | Dashboard — career stats, charts, recent matches |
+| `/competition/matches` | Full match table — search, filter, edit |
+| `/competition/tournaments` | Grouped by event, expandable |
+| `/competition/analytics` | Filter + breakdown charts |
+| `/competition/rivalries` | H2H records vs repeat opponents |
+| `/competition/reports` | Shareable stat cards, PNG download |
+| `/competition/insights` | AI-powered coaching insights |
+| `/competition/add-match` | Manual entry + AI entry (text/image/CSV) |
+
+Add a "Competition" nav item in `client/src/App.tsx` linking to `/competition`.
 
 ---
 
 ## Database Schema
 
-Add this to `shared/schema.ts` using Drizzle ORM:
+Add to `shared/schema.ts` using Drizzle ORM. Place the `matches` table alongside existing tables.
 
 ```typescript
-import { pgTable, serial, text, date, timestamp, integer } from 'drizzle-orm/pg-core'
-import { users } from './users' // or wherever the users table is defined
+import { pgTable, serial, integer, text, date, timestamp } from 'drizzle-orm/pg-core'
+import { users } from './users' // existing users table
 
 export const matches = pgTable('matches', {
   id: serial('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id),
+  userId: integer('user_id').references(() => users.id).notNull(),
   date: date('date').notNull(),
   tournament: text('tournament').notNull(),
   organization: text('organization'),
   belt: text('belt').notNull(),
   ageDivision: text('age_division'),
   weightClass: text('weight_class'),
-  giNogi: text('gi_nogi'),           // 'Gi', 'No Gi', or 'Suit'
-  divisionType: text('division_type'), // 'Regular', 'Challenger', 'Challenger I', 'Round Robin'
+  giNogi: text('gi_nogi'),         // 'Gi' | 'No Gi' | 'Suit'
+  divisionType: text('division_type'),
   opponent: text('opponent'),
-  result: text('result').notNull(),   // 'Win' or 'Loss'
-  method: text('method'),             // 'Submission', 'Points', 'Heel Hook', etc.
-  score: text('score'),               // e.g. '5-2', nullable
-  medal: text('medal'),               // 'Gold', 'Silver', 'Bronze', '5th', '7th', nullable
+  result: text('result').notNull(), // 'Win' | 'Loss'
+  method: text('method'),
+  score: text('score'),
+  medal: text('medal'),
   createdAt: timestamp('created_at').defaultNow(),
 })
 
@@ -67,314 +74,265 @@ export type Match = typeof matches.$inferSelect
 export type InsertMatch = typeof matches.$inferInsert
 ```
 
-Run the migration after adding this. No RLS, no triggers — just the table.
+Run `npm run db:push` or equivalent to apply the schema to Neon.
 
 ---
 
-## Routes — Mat Metrix Structure
+## Auth & Roles
 
-### Client routes (add to `client/src/App.tsx`)
+No new tables needed. Use the existing `users` table.
 
-```
-/competition              → Competition dashboard
-/competition/matches      → All matches table with search/filter/edit
-/competition/tournaments  → Grouped by tournament, expandable
-/competition/analytics    → Filter + charts + breakdowns
-/competition/rivalries    → H2H records vs repeat opponents
-/competition/reports      → Shareable stat cards (PNG download)
-/competition/insights     → AI performance analysis
-/competition/add-match    → Manual entry + AI entry
-```
+- **Admin check:** `req.user.role === 'admin'` (or however MatMetrix currently does it)
+- **User ID:** `req.user.claims.sub` or `req.user.id` — check existing routes for the pattern
+- All match data is scoped to `userId` — queries always filter by the authenticated user's ID
+- Write operations (POST, PATCH, DELETE) require admin role
+- Read operations require authentication only
 
-Add a "Competition" nav item to the existing MatMetrix sidebar/tab navigation.
-
-### Server routes (add to `server/routes.ts`)
-
-```
-GET    /api/competition/matches          → list matches (with query filters)
-POST   /api/competition/matches          → insert one or many matches
-PATCH  /api/competition/matches/:id      → update a match
-DELETE /api/competition/matches/:id      → delete a match
-POST   /api/competition/ai-parse         → AI match entry (text or image)
-POST   /api/competition/ai-insights      → AI performance insights
-```
-
-All routes use the existing `isAuthenticated` middleware. Write routes (POST/PATCH/DELETE) additionally check `req.user.role === 'admin'`.
+Skip the `/api/auth/invite` route entirely — MatMetrix already has user management.
 
 ---
 
-## Server Route Logic
+## Express API Routes
 
-### GET /api/competition/matches
+Add these to `server/routes.ts`. Follow the exact pattern existing MatMetrix routes use for auth middleware, error handling, and response shape.
 
-```typescript
-app.get('/api/competition/matches', isAuthenticated, async (req, res) => {
-  const { belt, gi_nogi, year, organization, limit } = req.query
-  
-  let query = db.select().from(matches).orderBy(desc(matches.date))
-  
-  // Add filters
-  const conditions = []
-  if (belt) conditions.push(eq(matches.belt, belt as string))
-  if (gi_nogi) conditions.push(eq(matches.giNogi, gi_nogi as string))
-  if (organization) conditions.push(eq(matches.organization, organization as string))
-  if (year) {
-    conditions.push(gte(matches.date, `${year}-01-01`))
-    conditions.push(lte(matches.date, `${year}-12-31`))
-  }
-  if (conditions.length) query = query.where(and(...conditions))
-  if (limit) query = query.limit(parseInt(limit as string))
-  
-  const data = await query
-  res.json(data)
-})
-```
+### GET `/api/competition/matches`
+Query params: `belt`, `gi_nogi`, `year`, `organization`, `limit`, `search`
+Returns all matches for `req.user.id`, filtered by any provided params.
 
-### POST /api/competition/matches
+### POST `/api/competition/matches`
+Body: single match object or array of match objects.
+Requires admin. Injects `userId` from `req.user.id`.
 
-```typescript
-app.post('/api/competition/matches', isAuthenticated, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
-  
-  const userId = req.user.claims.sub
-  const body = Array.isArray(req.body) ? req.body : [req.body]
-  const rows = body.map(m => ({ ...m, userId }))
-  
-  const inserted = await db.insert(matches).values(rows).returning()
-  res.status(201).json(inserted)
-})
-```
+### PATCH `/api/competition/matches/:id`
+Body: partial match fields to update.
+Requires admin. Verify match belongs to `req.user.id`.
 
-### PATCH /api/competition/matches/:id
+### DELETE `/api/competition/matches/:id`
+Requires admin. Verify match belongs to `req.user.id`.
+
+### POST `/api/competition/ai-parse`
+Body: `{ text?: string, imageBase64?: string, imageType?: string }`
+Calls Anthropic API, returns `{ matches: Match[] }` — structured match objects parsed from the input.
+Requires auth.
+
+### POST `/api/competition/ai-insights`
+Body: `{ matches: Match[] }` — full match list (pre-fetched client-side)
+Calls Anthropic API with pre-computed stats, returns `{ insights: Insight[] }`.
+Requires auth.
+
+---
+
+## Storage Methods
+
+Add these to `server/storage.ts` (or wherever MatMetrix puts DB query functions):
 
 ```typescript
-app.patch('/api/competition/matches/:id', isAuthenticated, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
-  
-  const { id } = req.params
-  const updated = await db.update(matches)
-    .set(req.body)
-    .where(eq(matches.id, parseInt(id)))
-    .returning()
-  
-  res.json(updated[0])
-})
-```
+// Get matches with optional filters
+async getMatches(userId: number, filters?: {
+  belt?: string
+  giNogi?: string
+  year?: string
+  organization?: string
+  search?: string
+  limit?: number
+}): Promise<Match[]>
 
-### DELETE /api/competition/matches/:id
+// Insert one or many matches
+async createMatches(matches: InsertMatch[]): Promise<Match[]>
 
-```typescript
-app.delete('/api/competition/matches/:id', isAuthenticated, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
-  
-  await db.delete(matches).where(eq(matches.id, parseInt(req.params.id)))
-  res.json({ success: true })
-})
-```
+// Update a match
+async updateMatch(id: number, userId: number, data: Partial<InsertMatch>): Promise<Match>
 
-### POST /api/competition/ai-parse
-
-```typescript
-app.post('/api/competition/ai-parse', isAuthenticated, async (req, res) => {
-  const { text, imageBase64, imageType } = req.body
-  
-  const content: any[] = []
-  if (imageBase64) {
-    content.push({ type: 'image', source: { type: 'base64', media_type: imageType || 'image/jpeg', data: imageBase64 } })
-  }
-  content.push({
-    type: 'text',
-    text: text ? `Parse the following into match data:\n\n${text}` : 'Parse the matches shown in this image.'
-  })
-  
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 4096,
-      system: AI_PARSE_SYSTEM_PROMPT, // see AI section below
-      messages: [{ role: 'user', content }],
-    }),
-  })
-  
-  const aiData = await response.json()
-  const raw = aiData.content?.[0]?.text || '[]'
-  const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-  const parsedMatches = JSON.parse(clean)
-  
-  res.json({ matches: Array.isArray(parsedMatches) ? parsedMatches : [parsedMatches] })
-})
-```
-
-### POST /api/competition/ai-insights
-
-```typescript
-app.post('/api/competition/ai-insights', isAuthenticated, async (req, res) => {
-  const { matches } = req.body
-  
-  // Pre-compute stats to minimize tokens (see stats section)
-  const statsContext = buildStatsContext(matches)
-  
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: buildInsightsPrompt(statsContext) }],
-    }),
-  })
-  
-  const aiData = await response.json()
-  const raw = aiData.content?.[0]?.text || '[]'
-  const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-  res.json({ insights: JSON.parse(clean) })
-})
+// Delete a match
+async deleteMatch(id: number, userId: number): Promise<void>
 ```
 
 ---
 
 ## Stats Library
 
-Create `client/src/lib/competition-stats.ts` (pure functions, no dependencies):
+Create `client/src/lib/competition-stats.ts`. These are pure functions — no DB calls, no side effects. Port directly from the standalone app.
 
 ```typescript
-export type Match = {
-  id?: number
-  date: string
-  tournament: string
-  organization: string
-  belt: string
-  ageDivision: string
-  weightClass: string
-  giNogi: string
-  divisionType: string
-  opponent: string
-  result: 'Win' | 'Loss'
-  method: string
-  score?: string | null
-  medal?: string | null
-}
+// All inputs are Match[] arrays
 
-export function calcOverallRecord(matches: Match[]) {
-  const wins = matches.filter(m => m.result === 'Win').length
-  const losses = matches.filter(m => m.result === 'Loss').length
-  const total = wins + losses
-  return { wins, losses, total, winRate: total > 0 ? ((wins / total) * 100).toFixed(1) : '0.0' }
-}
+calcOverallRecord(matches)
+// → { wins, losses, total, winRate: string }
 
-export function calcSubmissionRate(matches: Match[]) {
-  const wins = matches.filter(m => m.result === 'Win')
-  const subWins = wins.filter(m => {
-    const method = m.method?.toLowerCase() || ''
-    return method.includes('submission') || method.includes('triangle') ||
-      method.includes('armbar') || method.includes('heel hook') ||
-      method.includes('choke') || method.includes('lock') ||
-      method.includes('kimura') || method.includes('guillotine') ||
-      method.includes('rear naked') || method.includes('arm triangle')
-  })
-  return wins.length > 0 ? ((subWins.length / wins.length) * 100).toFixed(1) : '0.0'
-}
+calcSubmissionRate(matches)
+// → string (percentage of wins that were submissions)
 
-export function calcMedalCounts(matches: Match[]) {
-  const divisionMap = new Map<string, string>()
-  matches.forEach(m => {
-    const key = `${m.tournament}|${m.belt}|${m.ageDivision}|${m.weightClass}|${m.giNogi}|${m.divisionType}`
-    if (m.medal) divisionMap.set(key, m.medal)
-  })
-  const medals = Array.from(divisionMap.values())
-  return {
-    gold: medals.filter(m => m === 'Gold').length,
-    silver: medals.filter(m => m === 'Silver').length,
-    bronze: medals.filter(m => m === 'Bronze').length,
-    total: medals.filter(m => ['Gold', 'Silver', 'Bronze'].includes(m)).length,
-  }
-}
+calcMedalCounts(matches)
+// → { gold, silver, bronze, total }
+// Deduplicates medals per division: same tournament+belt+age+weight+gi+divisionType = one medal
 
-export function groupByYear(matches: Match[]) {
-  const map = new Map<string, { wins: number; losses: number }>()
-  matches.forEach(m => {
-    const year = new Date(m.date).getFullYear().toString()
-    const curr = map.get(year) || { wins: 0, losses: 0 }
-    if (m.result === 'Win') curr.wins++; else curr.losses++
-    map.set(year, curr)
-  })
-  return Array.from(map.entries())
-    .map(([year, { wins, losses }]) => ({ year, wins, losses, total: wins + losses, winRate: parseFloat(((wins / (wins + losses)) * 100).toFixed(1)) }))
-    .sort((a, b) => a.year.localeCompare(b.year))
-}
+groupByYear(matches)
+// → [{ year, wins, losses, total, winRate }] sorted ascending
 
-export function groupByBelt(matches: Match[]) {
-  const order = ['White', 'Blue', 'Purple', 'Brown', 'Black']
-  const map = new Map<string, { wins: number; losses: number }>()
-  matches.forEach(m => {
-    const curr = map.get(m.belt) || { wins: 0, losses: 0 }
-    if (m.result === 'Win') curr.wins++; else curr.losses++
-    map.set(m.belt, curr)
-  })
-  return Array.from(map.entries())
-    .map(([belt, { wins, losses }]) => ({ belt, wins, losses, total: wins + losses, winRate: parseFloat(((wins / (wins + losses)) * 100).toFixed(1)) }))
-    .sort((a, b) => order.indexOf(a.belt) - order.indexOf(b.belt))
-}
+groupByBelt(matches)
+// → [{ belt, wins, losses, total, winRate }] in White→Purple order
 
-export function groupByGiNogi(matches: Match[]) {
-  const map = new Map<string, { wins: number; losses: number }>()
-  matches.forEach(m => {
-    const key = m.giNogi || 'Unknown'
-    const curr = map.get(key) || { wins: 0, losses: 0 }
-    if (m.result === 'Win') curr.wins++; else curr.losses++
-    map.set(key, curr)
-  })
-  return Array.from(map.entries()).map(([type, { wins, losses }]) => ({
-    type, wins, losses, total: wins + losses,
-    winRate: parseFloat(((wins / (wins + losses)) * 100).toFixed(1))
-  }))
-}
+groupByGiNogi(matches)
+// → [{ type, wins, losses, total, winRate }]
 
-export function getTopOpponents(matches: Match[], minMatches = 2) {
-  const map = new Map<string, { wins: number; losses: number }>()
-  matches.forEach(m => {
-    if (!m.opponent || m.opponent === 'Unknown') return
-    const curr = map.get(m.opponent) || { wins: 0, losses: 0 }
-    if (m.result === 'Win') curr.wins++; else curr.losses++
-    map.set(m.opponent, curr)
-  })
-  return Array.from(map.entries())
-    .filter(([, { wins, losses }]) => wins + losses >= minMatches)
-    .map(([opponent, { wins, losses }]) => ({ opponent, wins, losses, total: wins + losses }))
-    .sort((a, b) => b.total - a.total)
-}
+getCurrentStreak(matches)
+// → { type: 'Win'|'Loss', count: number }
+// matches must be sorted newest-first
 
-export function getCurrentStreak(matches: Match[]) {
-  const sorted = [...matches].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  if (!sorted.length) return { type: 'None', count: 0 }
-  const streakType = sorted[0].result
-  let count = 0
-  for (const m of sorted) {
-    if (m.result === streakType) count++
-    else break
-  }
-  return { type: streakType === 'Win' ? 'Win' : 'Loss', count }
-}
+getTopOpponents(matches, minMatches = 2)
+// → [{ opponent, wins, losses, total }] sorted by total desc
 ```
+
+**Medal deduplication note:** Multiple rows can have the same medal (e.g. two wins in a bracket both show "Gold"). To count medals correctly, group by the composite key `tournament|belt|ageDivision|weightClass|giNogi|divisionType` and take the medal from any row in that group. Count unique groups.
 
 ---
 
-## AI Prompts
+## UI Components
 
-### AI Parse System Prompt
+All components use MatMetrix's existing shadcn/ui components and Tailwind classes. Do not introduce custom CSS variables or DM Sans/DM Mono fonts — use whatever the existing MatMetrix theme provides.
+
+### Components to build:
+
+**`CompetitionStatCard`**
+- Uses shadcn `Card`
+- Props: `label`, `value`, `sub`, `accent?: boolean`, `icon?: string`
+- `accent` variant: dark/inverted background using theme colors
+- `value` uses monospaced font (use `font-mono` Tailwind class)
+
+**`WinRateChart`**
+- Recharts `BarChart` — wins (green) vs losses (muted), custom tooltip
+- Responsive container, no hardcoded widths
+
+**`BeltBreakdown`**
+- Progress bars per belt with win rate percentage
+- Belt colors: White=#e5e7eb, Blue=#3b82f6, Purple=#8b5cf6, Brown=#92400e
+
+**`RecentMatchesTable`**
+- Columns: Result badge, Opponent + Tournament (stacked), Method, Gi/NoGi badge, Date
+- Result badge: green "W" / red "L" using shadcn Badge or equivalent
+- Horizontally scrollable on mobile (`overflow-x: auto`, `min-width: 480px` inner)
+
+**`EditMatchSheet`**
+- shadcn `Sheet` (slide-in panel) — use this instead of a custom modal
+- Pre-filled form with all match fields
+- Footer: Delete button (confirm on second click) + Save button
+
+**`CompetitionNav`**
+- Sub-navigation within the `/competition` section
+- Links: Dashboard · Matches · Tournaments · Analytics · Rivalries · Reports · AI Insights
+- Add Match button (admin only) — primary color, prominent
+
+---
+
+## Page Layouts
+
+### Mobile-first rules (apply to all pages):
+- Stats grids: 2 columns on mobile, 4 on desktop (`grid-cols-2 md:grid-cols-4`)
+- Charts: full width, stacked vertically — never side-by-side on mobile
+- Filter rows: 2×2 grid on mobile (`grid-cols-2`)
+- Tables: `overflow-x-auto` wrapper, `min-width` inner so columns don't collapse
+- Card pickers (Reports): horizontal scroll row, `overflow-x-auto`, `whitespace-nowrap` items
+
+### Dashboard (`/competition`)
+```
+[Header: "Competition Record" + subtitle]
+[4 stat cards: Record | Sub Rate | Streak | Medals]  ← 2col mobile, 4col desktop
+[3 gi/nogi cards: Gi | No Gi | Suit]
+[Win Rate by Year chart]  ← full width
+[Belt Breakdown]          ← full width
+[Recent Matches table]    ← scrollable
+```
+
+### Matches (`/competition/matches`)
+```
+[Header + running W-L count]
+[Search input — full width]
+[Filter row: Result | Belt | Type | Year | Org | Sort]  ← wrapping flex
+[Match table with pagination — 25 per page]
+[EditMatchSheet — opens on row click]
+```
+
+### Tournaments (`/competition/tournaments`)
+```
+[Header + medal totals]
+[Search + year filter]
+[Stacked tournament cards]
+  Each card: date badge | tournament name (wraps) | record | medals
+  Expanded: grouped by division, match rows with W/L badge + opponent + method
+```
+
+### Rivalries (`/competition/rivalries`)
+```
+Mobile: list view → tap opponent → detail view (full screen, back button)
+Desktop: two-column (list | detail panel)
+List row: full opponent name | W-L record | W/L/T badge | › arrow
+Detail: opponent name + record summary | stacked match history cards
+```
+
+### Analytics (`/competition/analytics`)
+```
+[Filter grid: 2×2 on mobile]
+[4 summary stat cards]
+[Year chart — full width]
+[Gi/No Gi bars — full width]
+[Finish methods bars — full width]
+```
+
+### Reports (`/competition/reports`)
+```
+[Header]
+[Card type picker — horizontal scroll row on mobile]
+[Year selector — shown when Year Recap active]
+[Stat card — full width]
+[Download PNG button — full width]
+```
+
+Stat card designs (dark background, light text):
+- **Career Summary:** 3-col stat grid (Record/Win%/Sub%), Gi split, medals, streak
+- **Year Recap:** record, win%, tournaments, submissions, medal counts
+- **Belt Journey:** progress bars per belt with W-L and win%
+- **Current Streak:** giant number + Win/Loss label, overall stats below
+- **Gi vs No Gi:** bars for each type with win%, overall record
+
+Use `html2canvas` for PNG export (`npm install html2canvas`).
+
+### AI Insights (`/competition/insights`)
+```
+[Header + Generate/Refresh button]
+[3 summary cards: Action Items | Observations | Strengths]
+[Insight cards — stacked, left border color by priority]
+  high = red border  |  medium = amber border  |  low = green border
+```
+
+Each insight has: icon (emoji), title, category badge, body text (2-3 sentences with specific numbers).
+Cache results in `localStorage` with timestamp. Show "Last updated" time.
+
+### Add Match (`/competition/add-match`)
+```
+[Tab switcher: Manual Entry | AI Entry]
+[Form card]
+```
+
+**Manual Entry form sections:**
+1. Tournament: Date | Org | Tournament Name
+2. Division: Belt | Gi/No Gi | Age Division | Weight Class | Division Type
+3. Result: Opponent | Win/Loss toggle | Method | Score | Medal
+
+**AI Entry:**
+- File drop zone (photo, screenshot, CSV, PDF)
+- Text paste area
+- "Parse with AI" button → loading state → Review screen
+- Review screen: list of parsed matches, expandable, each has full edit form, individual save + "Save All" button
+
+---
+
+## AI Feature Implementation
+
+### AI Parse (`POST /api/competition/ai-parse`)
 
 ```typescript
-const AI_PARSE_SYSTEM_PROMPT = `You are a BJJ competition data parser for Zack Kram's match tracker.
+const SYSTEM_PROMPT = `You are a BJJ competition data parser for Zack Kram's match tracker.
 
 Extract match data from any input: text descriptions, tournament result screenshots, bracket photos, spreadsheet data, handwritten notes, or any other format.
 
@@ -392,199 +350,95 @@ Each match object must have these exact fields:
   "tournament": "full tournament name",
   "organization": "org abbreviation",
   "belt": "White|Blue|Purple|Brown|Black",
-  "ageDivision": "e.g. Master 1 (30+)",
-  "weightClass": "e.g. Light (175)",
-  "giNogi": "Gi|No Gi|Suit",
-  "divisionType": "Regular|Challenger|Challenger I|Round Robin",
+  "age_division": "e.g. Master 1 (30+)",
+  "weight_class": "e.g. Light (175)",
+  "gi_nogi": "Gi|No Gi|Suit",
+  "division_type": "Regular|Challenger|Challenger I|Round Robin",
   "opponent": "Opponent Full Name",
   "result": "Win|Loss",
-  "method": "Submission|Points|Heel Hook|Armbar|Triangle|Kimura|Guillotine|Rear Naked Choke|Overtime|Ref Decision|Tie Breaker|Disqualification|Walkover",
+  "method": "Submission|Points|Heel Hook|Armbar|Triangle|etc",
   "score": "e.g. 5-2 or null",
   "medal": "Gold|Silver|Bronze|5th|7th or null"
 }
 
-If a field is unknown use null. Return a single-element array for one match. Return [] if nothing can be parsed.`
+If a field is unknown use null. result must be exactly Win or Loss. If multiple matches, return all. If none found, return [].`
 ```
 
-### AI Insights Prompt Builder
+Call `https://api.anthropic.com/v1/messages` with model `claude-opus-4-5`, pass text as user message or image as base64 content block.
+
+### AI Insights (`POST /api/competition/ai-insights`)
+
+Pre-compute these stats server-side before calling the API (keeps token usage low):
 
 ```typescript
-function buildStatsContext(matches: any[]) {
-  const wins = matches.filter(m => m.result === 'Win').length
-  const losses = matches.filter(m => m.result === 'Loss').length
+// Compute before API call:
+const wins = matches.filter(m => m.result === 'Win').length
+const losses = matches.length - wins
+const winRate = ((wins / matches.length) * 100).toFixed(1)
+const byYear = /* group by year, format as "2025: 18W-4L (82%)" */
+const byBelt = /* group by belt */
+const byGiNogi = /* group by gi_nogi with win rates */
+const methods = /* top 8 finish methods with counts */
+const lossMethods = /* top 5 ways matches were lost */
+const repeatOpponents = /* opponents with 2+ matches, W-L per */
+const recentForm = /* last 10 matches W-L */
+const streak = /* current streak */
+```
 
-  const byYear = Object.entries(
-    matches.reduce((acc, m) => {
-      const y = m.date?.slice(0, 4) || 'unknown'
-      if (!acc[y]) acc[y] = { wins: 0, losses: 0 }
-      if (m.result === 'Win') acc[y].wins++; else acc[y].losses++
-      return acc
-    }, {} as Record<string, any>)
-  ).sort().map(([y, r]: any) => `${y}: ${r.wins}W-${r.losses}L`).join(', ')
-
-  const byBelt = Object.entries(
-    matches.reduce((acc, m) => {
-      if (!acc[m.belt]) acc[m.belt] = { wins: 0, losses: 0 }
-      if (m.result === 'Win') acc[m.belt].wins++; else acc[m.belt].losses++
-      return acc
-    }, {} as Record<string, any>)
-  ).map(([b, r]: any) => `${b}: ${r.wins}W-${r.losses}L`).join(', ')
-
-  const lossMethods = Object.entries(
-    matches.filter(m => m.result === 'Loss').reduce((acc, m) => {
-      if (m.method) acc[m.method] = (acc[m.method] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-  ).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5).map(([m, c]) => `${m}(${c})`).join(', ')
-
-  const recent = matches.slice(0, 10)
-  const recentWins = recent.filter(m => m.result === 'Win').length
-  const streak = (() => {
-    let count = 0; const type = matches[0]?.result
-    for (const m of matches) { if (m.result === type) count++; else break }
-    return `${count} ${type}s`
-  })()
-
-  return { wins, losses, total: matches.length, winRate: ((wins/matches.length)*100).toFixed(1), byYear, byBelt, lossMethods, recentRecord: `${recentWins}W-${10-recentWins}L (last 10)`, streak }
-}
-
-function buildInsightsPrompt(stats: ReturnType<typeof buildStatsContext>) {
-  return `You are a BJJ performance coach analyzing competition data for Zack Kram (Purple belt, Masters division).
-
-STATS: Overall ${stats.wins}W-${stats.losses}L (${stats.winRate}%), ${stats.total} matches
-Streak: ${stats.streak} | Recent: ${stats.recentRecord}
-By year: ${stats.byYear}
-By belt: ${stats.byBelt}
-How losses happen: ${stats.lossMethods}
-
-Generate exactly 8 insights. Each must be specific, data-backed, and actionable. Cover: win rate trends, submission patterns, Gi vs No Gi, year-over-year improvement, weaknesses, and one motivational note.
-
-Return ONLY a JSON array, no markdown:
-[{ "category": "string", "title": "5-8 word title", "body": "2-3 sentences with specific numbers.", "icon": "emoji", "priority": "high|medium|low" }]
-
-Priority: high = needs work, medium = interesting pattern, low = strength.`
+Prompt asks for exactly 8 insights, JSON array only:
+```typescript
+type Insight = {
+  category: string    // e.g. "Submission Game", "Defense", "Trends"
+  title: string       // 5-8 words
+  body: string        // 2-3 sentences with specific numbers
+  icon: string        // single emoji
+  priority: 'high' | 'medium' | 'low'  // high=needs work, low=strength
 }
 ```
 
----
-
-## UI Pages — What to Build
-
-Each page below needs to be built as a React component using **Mat Metrix's existing design system** (shadcn/ui components, Tailwind classes, existing Card/Button/Badge/Input/Select components). Do not introduce new design tokens.
-
-### 1. Dashboard (`/competition`)
-- Page header: "Competition Record" with sub-stat (total matches, tournaments, date range)
-- 4 stat cards: Overall Record, Submission Rate, Current Streak, Total Medals
-- 3 mini cards: Gi / No Gi / Suit split (wins-losses + win%)
-- Win rate by year bar chart (Recharts BarChart)
-- Belt breakdown progress bars
-- Recent 15 matches table (scrollable on mobile)
-
-### 2. Matches (`/competition/matches`)
-- Search bar (opponent, tournament, method, org)
-- Filter row: Result, Belt, Gi/NoGi, Year, Org, Sort direction
-- Live W-L count for filtered set
-- Paginated table (25/page): Date | W/L badge + Opponent | Tournament + Org | Method | Score | Gi badge | Belt | Medal
-- Click any row → slide-in edit panel (pre-filled form, save + confirm-delete)
-
-### 3. Tournaments (`/competition/tournaments`)
-- Filter: search + year
-- List of tournament cards, sorted newest first
-- Each card: date badge, full tournament name (no truncation), org + match count, W-L record + win%, medals
-- Tap/click to expand → divisions grouped within, each division shows match list (W/L badge + opponent + method + score)
-
-### 4. Analytics (`/competition/analytics`)
-- 2×2 filter grid: Belt, Gi/NoGi, Year, Org
-- 4 summary stat cards
-- Win rate by year chart (full width)
-- Gi/No Gi/Suit breakdown bars (full width)
-- Finish methods breakdown bars (full width)
-
-### 5. Rivalries (`/competition/rivalries`)
-- List of opponents faced 2+ times: full name, match count, W-L record, W/L/T badge
-- Tap opponent → drill-down view: H2H record summary + all matches (tournament, method, belt, gi/nogi, score, date)
-- Mobile: list → detail navigation (no side-by-side panels)
-
-### 6. Reports (`/competition/reports`)
-- Horizontally scrollable card type picker: Career Summary, Year Recap, Belt Journey, Current Streak, Gi vs No Gi
-- Full-width stat card preview (dark background cards)
-- Download PNG button (html2canvas)
-- Year selector when Year Recap is active
-
-### 7. AI Insights (`/competition/insights`)
-- Generate button → calls `/api/competition/ai-insights`
-- Results cached in localStorage
-- Summary row: count of high/medium/low priority insights
-- Insight cards: left colored border by priority, icon, title, category badge, body text
-- Loading skeleton while generating
-
-### 8. Add Match (`/competition/add-match`)
-- Tab switcher: Manual Entry | AI Entry
-- **Manual:** full form (date, org, tournament, belt, gi/nogi, age div, weight, division type, opponent, result toggle, method, score, medal)
-- **AI Entry:** file drop zone (image/CSV/PDF) + text paste area → Parse button → review screen showing parsed matches, each expandable to edit before saving
-- Admin only (redirect non-admins)
+**Required env var:** `ANTHROPIC_API_KEY`
 
 ---
 
 ## Data Import
 
-After the schema is created and migrated, import the 166 historical matches. The CSV is at `bjj_competition_results.csv` in the project files.
+166 historical matches need to be imported into the new `matches` table once it exists. The data is in a CSV with these columns:
 
-Column mapping from CSV → schema:
 ```
-Date           → date (strip time, keep YYYY-MM-DD)
-Tournament     → tournament
-Organization   → organization
-Belt           → belt
-Age Division   → ageDivision
-Weight Class   → weightClass
-Gi/NoGi        → giNogi
-Division Type  → divisionType
-Opponent       → opponent
-Result         → result
-Method         → method
-Score          → score (null if empty)
-Medal          → medal (null if empty)
+Date, Tournament, Organization, Belt, Age Division, Weight Class, Gi/NoGi, Division Type, Opponent, Result, Method, Score, Medal
 ```
 
-Set `userId` to Zack's user ID from the `users` table for all imported rows.
+Write a one-time import script or seed function that:
+1. Reads the CSV
+2. Maps column names to schema field names (note: `Gi/NoGi` → `giNogi`, `Age Division` → `ageDivision`, etc.)
+3. Strips the time component from Date values (they come as `2026-02-21 00:00:00`)
+4. Inserts all rows with `userId` set to Zack's user ID in the MatMetrix database
+5. Handles empty strings as `null`
 
----
-
-## Environment Variable
-
-Add to Mat Metrix's environment:
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-This is already set and working in the standalone app.
+The CSV data is available at `/mnt/project/bjj_competition_results.csv` in the project files.
 
 ---
 
 ## Implementation Order
 
-1. **Confirm** the `users` table field name for role (`role`?) and user ID (`id`? or something else?)
-2. **Add** `matches` table to `shared/schema.ts`, run migration
-3. **Install** Recharts: `npm install recharts`
-4. **Add** server routes to `server/routes.ts`
-5. **Create** `client/src/lib/competition-stats.ts`
-6. **Create** AI prompt helpers (can live in a server utility file)
-7. **Build** UI pages using shadcn/ui components
-8. **Add** Competition nav item to `client/src/App.tsx`
-9. **Import** 166 historical matches (write a one-time script or seed function)
-10. **Test** auth gating, AI entry, AI insights, PNG download
+Follow this order — each step unblocks the next:
+
+1. **Schema** — add `matches` table to `shared/schema.ts`, run migration
+2. **Storage** — add query methods to `server/storage.ts`
+3. **API routes** — add all `/api/competition/*` routes to `server/routes.ts`
+4. **Data import** — seed the 166 matches
+5. **Stats lib** — create `client/src/lib/competition-stats.ts`
+6. **Shared components** — StatCard, WinRateChart, BeltBreakdown, RecentMatchesTable, EditMatchSheet
+7. **Pages** — Dashboard first (most components), then Matches, Tournaments, Analytics, Rivalries, Reports, Insights, Add Match
+8. **Sub-nav** — CompetitionNav component, wire into App.tsx
+9. **AI features** — ai-parse and ai-insights routes + client UI
+10. **Polish** — mobile layout audit, loading states, empty states
 
 ---
 
-## Reference — Feature Behavior
+## Reference
 
-The live standalone app at https://bjj-tracker-ochre.vercel.app shows exactly how every feature works and looks. Use it as a reference for behavior — but all visual styling must match Mat Metrix, not the standalone app's warm beige/gold theme.
-
-Key behaviors to preserve exactly:
-- Medal deduplication: medals are counted per division (tournament + belt + age + weight + gi + divisionType), not per match
-- AI parse review flow: parsed matches shown as expandable cards, each editable before saving, "Save All" batch option
-- AI insights caching: results stored in localStorage, "Refresh" option to regenerate
-- Edit modal: slide-in panel with confirm-before-delete (click once to arm, click again to confirm)
-- Rivalries drill-down: mobile uses full-screen detail view, not side-by-side
-- Reports: stat cards have dark backgrounds regardless of app theme (they're export artifacts)
+- Live standalone app: https://bjj-tracker-ochre.vercel.app
+- Standalone GitHub: https://github.com/ezindustriesus/bjj-tracker
+- CSV data: `/mnt/project/bjj_competition_results.csv`
+- All 166 matches span September 2019 – February 2026 across 34 tournaments
