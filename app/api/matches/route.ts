@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+function headers() {
+  return {
+    'apikey': SERVICE_KEY,
+    'Authorization': `Bearer ${SERVICE_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -9,40 +20,43 @@ export async function GET(request: NextRequest) {
   const year = searchParams.get('year')
   const organization = searchParams.get('organization')
 
-  const supabase = createServiceClient()
-  let query = supabase.from('matches').select('*').order('date', { ascending: false })
+  let url = `${SUPABASE_URL}/rest/v1/matches?select=*&order=date.desc`
+  if (belt) url += `&belt=eq.${encodeURIComponent(belt)}`
+  if (gi_nogi) url += `&gi_nogi=eq.${encodeURIComponent(gi_nogi)}`
+  if (organization) url += `&organization=eq.${encodeURIComponent(organization)}`
+  if (year) url += `&date=gte.${year}-01-01&date=lte.${year}-12-31`
+  if (limit) url += `&limit=${limit}`
 
-  if (belt) query = query.eq('belt', belt)
-  if (gi_nogi) query = query.eq('gi_nogi', gi_nogi)
-  if (organization) query = query.eq('organization', organization)
-  if (year) {
-    query = query
-      .gte('date', `${year}-01-01`)
-      .lte('date', `${year}-12-31`)
+  try {
+    const res = await fetch(url, { headers: headers() })
+    if (!res.ok) {
+      const err = await res.text()
+      return NextResponse.json({ error: err }, { status: res.status })
+    }
+    const data = await res.json()
+    return NextResponse.json(data)
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message, url: SUPABASE_URL }, { status: 500 })
   }
-  if (limit) query = query.limit(parseInt(limit))
-
-  const { data, error } = await query
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json(data)
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
-  const supabase = createServiceClient()
-
-  // Support single match or array
   const matches = Array.isArray(body) ? body : [body]
 
-  const { data, error } = await supabase.from('matches').insert(matches).select()
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/matches`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(matches)
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      return NextResponse.json({ error: err }, { status: res.status })
+    }
+    const data = await res.json()
+    return NextResponse.json(data, { status: 201 })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message, url: SUPABASE_URL }, { status: 500 })
   }
-
-  return NextResponse.json(data, { status: 201 })
 }
